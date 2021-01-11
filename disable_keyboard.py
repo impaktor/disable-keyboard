@@ -5,19 +5,17 @@ https://python-evdev.readthedocs.io/en/latest/tutorial.html
 
 https://www.freedesktop.org/software/libevdev/doc/latest/group__init.html#ga5d434af74fee20f273db568e2cbbd13f
 This is what I do in c
-
-"Grab or ungrab the device through a kernel EVIOCGRAB.
-This prevents other clients (including kernel-internal ones such as rfkill) from receiving events from this device.
-This is generally a bad idea. Don't do this."
-
 """
 
 import evdev
 
-devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+def find_device(devices, match):
+    """Find device path with name that matches input"""
 
-# Print info on all devices (need to run as root):
-[print(f"{device.path}\t{device.name}\t{device.phys}") for device in devices]
+    for device in devices:
+        if match == device.name:
+            print(f"Found device path: {device.path}")
+            return device.path
 
 
 def get_info(dev_path='/dev/input/event6'):
@@ -33,21 +31,51 @@ def get_info(dev_path='/dev/input/event6'):
     print(dev.active_keys(verbose=True))
 
 
-# choose path to keyboard device
-path = '/dev/input/event6'
+# todo https://python-evdev.readthedocs.io/en/latest/apidoc.html
+def getKey(dev):
+    "dev - input device"
+    # https://raspberrypi.stackexchange.com/questions/50007/mapping-key-events-using-evdev
+    for event in dev.read_loop():
+        if event.type == evdev.ecodes.EV_KEY:
+            c = evdev.categorize(event)
+            if c.keystate == c.key_down:
+                yield c.keycode
 
-# tpad = evdev.InputDevice('/dev/input/event11')
-keybd = evdev.InputDevice(path)
 
-# disable device
-keybd.grab()
-print("grabbing keyboard!")
+if __name__ == "__main__":
+    # Find all devices
+    devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
 
-# Print every key pressed, hang-loop:
-for event in keybd.read_loop():
-    if event.type == evdev.ecodes.EV_KEY:
-        print(evdev.categorize(event))
-        # find if "KEY_ESC"
+    # Print info on all devices (need to run as root):
+    for device in devices:
+        print(f"{device.path}\t{device.name}\t{device.phys}")
 
-print("ungrabbing keyboard!")
-keybd.ungrab()
+    # Identified & copied from reading output of all devices:
+    laptop_keyboard_name = "AT Translated Set 2 keyboard"
+
+    # Choose path in /dev/input/<x> to keyboard device:
+    # path = '/dev/input/event4'
+    path = find_device(devices, laptop_keyboard_name)
+
+    get_info(path)
+
+    # keygenerator = getKey()
+
+    # tpad = evdev.InputDevice('/dev/input/event11')
+    keybd = evdev.InputDevice(path)
+
+    # disable device
+    keybd.grab()
+    print("grabbing keyboard!")
+
+    # Print every key pressed, hang-loop:
+    for event in keybd.read_loop():
+        if event.type == evdev.ecodes.EV_KEY:
+            print(evdev.categorize(event))
+
+            # ESC on the now dead keyboard kills the script and returns control
+            if evdev.categorize(event).keycode == "KEY_ESC":
+                break
+
+    print("ungrabbing keyboard!")
+    keybd.ungrab()
